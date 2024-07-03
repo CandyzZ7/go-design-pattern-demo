@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 )
 
 // Champion 定义英雄联盟角色
@@ -26,6 +27,46 @@ func GenderFilter(gender string) FilterFunc {
 	return func(champion Champion) bool {
 		return champion.Gender == gender
 	}
+}
+
+// ApplyFiltersConcurrent 并发应用过滤器
+func ApplyFiltersConcurrent(filters []FilterFunc, champions []Champion) []Champion {
+	var (
+		wg             sync.WaitGroup
+		result         []Champion
+		filteredChamps = make(chan Champion, len(champions))
+	)
+
+	// 启动多个 goroutine 来并行处理过滤器
+	for _, champion := range champions {
+		wg.Add(1)
+		go func(champion Champion) {
+			defer wg.Done()
+			passes := true
+			for _, filter := range filters {
+				if !filter(champion) {
+					passes = false
+					break
+				}
+			}
+			if passes {
+				filteredChamps <- champion
+			}
+		}(champion)
+	}
+
+	// 等待所有 goroutine 完成
+	go func() {
+		wg.Wait()
+		close(filteredChamps)
+	}()
+
+	// 收集结果
+	for champion := range filteredChamps {
+		result = append(result, champion)
+	}
+
+	return result
 }
 
 // ApplyFilters 应用过滤器链
